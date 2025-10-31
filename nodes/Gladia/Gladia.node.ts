@@ -1,6 +1,7 @@
 import { IExecuteFunctions, IHttpRequestOptions, INodeExecutionData, INodeType, INodeTypeDescription, NodeOperationError } from "n8n-workflow";
 import { Buffer } from 'buffer';
 import { dictArrayToObject, entriesToObject, normalizeDiarization, normalizeVocabulary, pick } from "./helpers";
+import { AudioToLLMConfig, CallbackConfig, DiarizationConfig, LanguageConfig, PreRecordedInitRequest, PreRecordedInitResponse, StructuredDataExtractionConfig, SubtitlesConfig, SummarizationConfig, TranslationConfig } from "./types";
 
 export class Gladia implements INodeType {
     description: INodeTypeDescription = {
@@ -638,18 +639,18 @@ export class Gladia implements INodeType {
                 try {
                     const audioUrl = this.getNodeParameter('audio_url', i) as string
 
-                    const body: any = { 'audio_url': audioUrl };
+                    const body: PreRecordedInitRequest = { 'audio_url': audioUrl };
 
                     // Callback
                     if (this.getNodeParameter('callback', i) as boolean) {
-                        const cfg = this.getNodeParameter('callback_config', i, {}) as any;
+                        const cfg = this.getNodeParameter('callback_config', i, {}) as CallbackConfig;
                         body.callback = true;
                         body.callback_config = pick(cfg, ['url', 'method']);
                     }
 
                     // Subtitles
                     if (this.getNodeParameter('subtitles', i) as boolean) {
-                        const cfg = this.getNodeParameter('subtitles_config', i, {}) as any;
+                        const cfg = this.getNodeParameter('subtitles_config', i, {}) as SubtitlesConfig;
                         body.subtitles = true;
                         body.subtitles_config = pick(cfg, [
                             'formats',
@@ -663,23 +664,23 @@ export class Gladia implements INodeType {
 
                     // Diarization
                     if (this.getNodeParameter('diarization', i) as boolean) {
-                        const cfg = this.getNodeParameter('diarization_config', i, {}) as any;
+                        const cfg = this.getNodeParameter('diarization_config', i, {}) as DiarizationConfig;
                         body.diarization = true;
                         body.diarization_config = normalizeDiarization(cfg);
                     }
 
                     // Summarization
                     if (this.getNodeParameter('summarization', i) as boolean) {
-                        const cfg = this.getNodeParameter('summarization_config', i, {}) as any;
+                        const cfg = this.getNodeParameter('summarization_config', i, {}) as SummarizationConfig;
                         body.summarization = true;
                         body.summarization_config = pick(cfg, ['type']);
                     }
 
                     // Translation
                     if (this.getNodeParameter('translation', i) as boolean) {
-                        const cfg = this.getNodeParameter('translation_config', i, {}) as any;
+                        const cfg = this.getNodeParameter('translation_config', i, {}) as TranslationConfig;
                         body.translation = true;
-                        const copy = pick(cfg, [
+                        body.translation_config = pick(cfg, [
                             'target_languages',
                             'model',
                             'match_original_utterances',
@@ -688,7 +689,6 @@ export class Gladia implements INodeType {
                             'context',
                             'informal',
                         ]);
-                        body.translation_config = copy;
                     }
 
                     // Custom Vocabulary
@@ -714,21 +714,21 @@ export class Gladia implements INodeType {
 
                     // Structured Data Extraction
                     if (this.getNodeParameter('structured_data_extraction', i) as boolean) {
-                        const cfg = this.getNodeParameter('structured_data_extraction_config', i, {}) as any;
+                        const cfg = this.getNodeParameter('structured_data_extraction_config', i, {}) as StructuredDataExtractionConfig;
                         body.structured_data_extraction = true;
                         body.structured_data_extraction_config = pick(cfg, ['classes']);
                     }
 
                     // Audio to LLM
                     if (this.getNodeParameter('audio_to_llm', i) as boolean) {
-                        const cfg = this.getNodeParameter('audio_to_llm_config', i, {}) as any;
+                        const cfg = this.getNodeParameter('audio_to_llm_config', i, {}) as AudioToLLMConfig;
                         body.audio_to_llm = true;
                         body.audio_to_llm_config = pick(cfg, ['prompts']);
                     }
 
                     // Language Config
                     {
-                        const cfg = this.getNodeParameter('language_config', i, {}) as any;
+                        const cfg = this.getNodeParameter('language_config', i, {}) as LanguageConfig;
                         const lc = pick(cfg, ['languages', 'code_switching']);
                         if (
                             (Array.isArray(lc?.languages) && lc.languages.length > 0) ||
@@ -756,7 +756,7 @@ export class Gladia implements INodeType {
 
                     // Custom Metadata
                     {
-                        const meta = this.getNodeParameter('custom_metadata', i, []) as any[];
+                        const meta = this.getNodeParameter('custom_metadata', i, []) as Record<string, any>[];
                         if (Array.isArray(meta) && meta.length) {
                             const entries = meta.map((e) => e.entry);
                             const obj = entriesToObject(entries);
@@ -810,7 +810,7 @@ export class Gladia implements INodeType {
 
                     const response = await this.helpers.httpRequestWithAuthentication.call(this, 'gladiaApi', options)
 
-                    const body = response?.body ?? response
+                    const body: any = response?.body as PreRecordedInitResponse ?? response
 
                     returnData.push({
                         json: {

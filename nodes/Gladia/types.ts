@@ -99,18 +99,15 @@ export interface PreRecordedInitRequest {
   audio_to_llm?: boolean;
   audio_to_llm_config?: AudioToLLMConfig;
 
-  // metadata & display
   custom_metadata?: Record<string, unknown>;
   sentences?: boolean;
   display_mode?: boolean;
   punctuation_enhanced?: boolean;
 
-  // language (replacement for deprecated language/detection/code-switching fields)
   language_config?: LanguageConfig;
 
-  // callbacks / webhooks
-  callback_url?: string;       // legacy-style simple URL
-  callback?: boolean;          // enable callbacks
+  callback_url?: string;
+  callback?: boolean;
   callback_config?: CallbackConfig;
 }
 
@@ -118,5 +115,5 @@ export interface PreRecordedInitRequest {
 
 export interface PreRecordedInitResponse {
   id: string;
-  result_url: string; // GET /v2/pre-recorded/:id
+  result_url: string;
 }
