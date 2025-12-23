@@ -45,6 +45,10 @@ export class Gladia implements INodeType {
                         name: 'Get Transcription',
                         value: 'gettranscription'
                     },
+										{
+												name: 'List Transcriptions',
+												value: 'listtranscriptions'
+										}
                 ],
                 default: 'uploadfile'
             },
@@ -117,11 +121,11 @@ export class Gladia implements INodeType {
                 displayName: 'Custom Vocabulary Config',
                 name: 'custom_vocabulary_config',
                 type: 'collection',
-                displayOptions: { 
-                    show: { 
-                        custom_vocabulary: [true], 
-                        operation: ['starttranscription'] 
-                    } 
+                displayOptions: {
+                    show: {
+                        custom_vocabulary: [true],
+                        operation: ['starttranscription']
+                    }
                 },
                 default: {},
                 options: [
@@ -268,7 +272,7 @@ export class Gladia implements INodeType {
                         name: 'style',
                         type: 'options',
                         options: [
-                            { name: 'Default', value: 'default' }, 
+                            { name: 'Default', value: 'default' },
                             { name: 'Compliance', value: 'compliance' }
                         ],
                         default: 'default',
@@ -574,9 +578,96 @@ export class Gladia implements INodeType {
                     }
                 },
             },
+						{
+								displayName: 'Pagination',
+								name: 'pagination',
+								type: 'collection',
+								placeholder: 'Add Pagination',
+								default: {},
+								displayOptions: {
+										show: {
+												operation: ['listtranscriptions']
+										}
+								},
+								options: [
+										{
+												displayName: 'Offset',
+												name: 'offset',
+												type: 'number',
+												default: 0,
+												description: 'The starting point for pagination',
+												typeOptions: {
+														minValue: 0,
+												},
+										},
+									  {
+												displayName: 'Limit',
+												name: 'limitTranscriptions',
+												type: 'number',
+												default: 20,
+												description: 'The maximum number of items to return',
+												typeOptions: {
+														minValue: 1,
+												},
+										},
+								],
+						},
+						{
+								displayName: 'Date Filters',
+								name: 'date_filters',
+								type: 'collection',
+								placeholder: 'Add Date Filter',
+								default: {},
+								displayOptions: {
+										show: {
+												operation: ['listtranscriptions']
+										}
+								},
+								options: [
+										{
+												displayName: 'Date',
+												name: 'date',
+												type: 'dateTime',
+												default: '',
+												description: 'Filter items relevant to a specific date',
+										},
+										{
+												displayName: 'Before Date',
+												name: 'before_date',
+												type: 'dateTime',
+												default: '',
+												description: 'Include items that occurred before the specified date',
+										},
+										{
+												displayName: 'After Date',
+												name: 'after_date',
+												type: 'dateTime',
+												default: '',
+												description: 'Filter for items after the specified date',
+										},
+								],
+						},
+						{
+								displayName: 'Status',
+								name: 'status',
+								type: 'multiOptions',
+								default: [],
+								displayOptions: {
+										show: {
+												operation: ['listtranscriptions']
+										}
+								},
+								options: [
+										{ name: 'Queued', value: 'queued' },
+										{ name: 'Processing', value: 'processing' },
+										{ name: 'Done', value: 'done' },
+										{ name: 'Error', value: 'error' },
+								],
+								description: 'Filter the list based on item status',
+						}
         ]
     }
-	
+
     async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
         const items = this.getInputData();
         const returnData: INodeExecutionData[] = [];
@@ -588,18 +679,18 @@ export class Gladia implements INodeType {
             if (operation === 'uploadfile') {
                 try {
                     const binaryPropertyName = (this.getNodeParameter('file', i) as string);
-    
+
                     const item = items[i];
-                    
+
                     if (!item.binary || !item.binary[binaryPropertyName]) {
                         throw new NodeOperationError(this.getNode(), `No binary data found under property "${binaryPropertyName}"`, {
                             itemIndex: i,
                         });
                     }
-    
+
                     const binary = this.helpers.assertBinaryData(i, binaryPropertyName)
                     const buffer = Buffer.from(binary.data, 'base64')
-    
+
                     const options: IHttpRequestOptions = {
                         method: 'POST',
                         url: 'https://api.gladia.io/v2/upload',
@@ -612,11 +703,11 @@ export class Gladia implements INodeType {
                             audio: buffer
                         },
                     };
-    
+
                     const response = await this.helpers.httpRequestWithAuthentication.call(this, 'gladiaApi', options)
-    
+
                     const body = response?.body ?? response;
-    
+
                     returnData.push({
                         json: {
                             ...((typeof body === 'object' && body) ? body : { result: body }),
@@ -829,6 +920,50 @@ export class Gladia implements INodeType {
                 }
             }
 
+						else if (operation === 'listtranscriptions') {
+							try {
+									const pagination = this.getNodeParameter('pagination', i, {}) as { offset?: number; limitTranscriptions?: number };
+									const dateFilters = this.getNodeParameter('date_filters', i, {}) as { date?: string; before_date?: Date; after_date?: Date };
+									const status = this.getNodeParameter('status', i, []) as string[];
+									const queryParams: string[] = [];
+
+									if (pagination.offset !== undefined) queryParams.push(`offset=${pagination.offset}`);
+									if (pagination.limitTranscriptions !== undefined) queryParams.push(`limit=${pagination.limitTranscriptions}`);
+									if (dateFilters.date) queryParams.push(`date=${new Date(dateFilters.date).toISOString().split('T')[0]}`);
+									if (dateFilters.before_date) queryParams.push(`before_date=${new Date(dateFilters.before_date).toISOString()}`);
+									if (dateFilters.after_date) queryParams.push(`after_date=${new Date(dateFilters.after_date).toISOString()}`);
+
+									status.forEach(s => queryParams.push(`status=${encodeURIComponent(s)}`));
+									const queryString = queryParams.join('&');
+
+									const url = `https://api.gladia.io/v2/pre-recorded${queryString ? `?${queryString}` : ''}`;
+									const options: IHttpRequestOptions = {
+											method: 'GET',
+											url: url,
+											ignoreHttpStatusErrors: true,
+											returnFullResponse: true,
+									};
+
+									const response = await this.helpers.httpRequestWithAuthentication.call(this, 'gladiaApi', options);
+
+									const body: any = response?.body ?? response;
+
+									returnData.push({
+											json: {
+													...((typeof body === 'object' && body) ? body : { result: body })
+											}
+									});
+							} catch (error) {
+									if (this.continueOnFail()) {
+											returnData.push({
+													json: { error: (error as Error).message },
+													pairedItem: { item: i },
+											});
+											continue;
+									}
+									throw new NodeOperationError(this.getNode(), (error as Error).message, { itemIndex: i });
+							}
+					}
         }
         return [returnData]
     }
